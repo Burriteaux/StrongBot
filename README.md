@@ -29,8 +29,8 @@ A Discord bot that tracks and reports Solana validator statistics and StrongSOL 
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd <repository-name>
+git clone https://github.com/Burriteaux/StrongBot.git
+cd StrongBot
 ```
 
 2. Create and activate a virtual environment:
@@ -98,4 +98,4 @@ For issues or questions, please open an issue in the repository.
 
 ## License
 
-MIT License - feel free to use and modify as needed. 
+MIT License - feel free to use and modify as needed.
