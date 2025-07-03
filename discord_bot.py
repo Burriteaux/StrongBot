@@ -75,7 +75,7 @@ class ExtractSchema(BaseModel):
     leader_rewards: Optional[float] = Field(default=None)
     commission: Optional[float] = Field(default=None)
     voting_fee: Optional[float] = Field(default=None)
-    current_stats_val: Optional[float] = Field(default=None) # Previous Epoch Total
+    current_stats_val: Optional[float] = Field(default=None) # Not used - replaced by calculated SOL Amount to LST
     # current_identity_balance: Optional[float] = Field(default=None) # Removed
     # vote_balance: Optional[float] = Field(default=None) # Removed
     volume_24h: Optional[float] = Field(default=None, alias="StrongSOL 24hr Volume ($)")
@@ -226,7 +226,13 @@ From app.sanctum.so/strongSOL - Extract the APY for strongSOL, if multiple APYs 
         embed.add_field(name='Leader Rewards (Previous Epoch)', value=f"{data.get('leader_rewards', 'N/A'):,.2f} SOL" if data.get('leader_rewards') is not None else "N/A", inline=False)
         embed.add_field(name='Commission Earned (Previous Epoch)', value=f"{data.get('commission', 'N/A')} SOL" if data.get('commission') is not None else "N/A", inline=False)
         embed.add_field(name='Voting Fee', value=f"{data.get('voting_fee', 'N/A')} SOL" if data.get('voting_fee') is not None else "N/A", inline=False)
-        embed.add_field(name='Previous Epoch Total', value=f"{data.get('current_stats_val', 'N/A'):,.2f} SOL" if data.get('current_stats_val') is not None else "N/A", inline=False)
+        
+        # Calculate SOL Amount to LST: Leader Rewards + Commission - VotingFee
+        sol_amount_to_lst = None
+        if all(data.get(field) is not None for field in ['leader_rewards', 'commission', 'voting_fee']):
+            sol_amount_to_lst = data.get('leader_rewards', 0) + data.get('commission', 0) - data.get('voting_fee', 0)
+        
+        embed.add_field(name='SOL Amount to LST', value=f"{sol_amount_to_lst:,.2f} SOL" if sol_amount_to_lst is not None else "N/A", inline=False)
 
         # Define wallet labels
         wallet_labels = {
