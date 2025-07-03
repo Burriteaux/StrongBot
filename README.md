@@ -18,7 +18,9 @@ A Discord bot that tracks and reports Solana validator statistics and StrongSOL 
 - Leader Rewards
 - Commission Earned
 - Voting Fee
-- SOL Amount to LST (Leader Rewards + Commission - Voting Fee)
+- Previous Epoch Total
+- Current Identity Balance
+- Current Vote Balance
 - StrongSOL 24h Volume
 - StrongSOL Holders Count
 - StrongSOL Current Supply
