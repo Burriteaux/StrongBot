@@ -162,42 +162,30 @@ async def post_update():
                 "https://solscan.io/token/strng7mqqc1MBJJV6vMzYbEqnwVGvKKGKedeCvtktWA",
                 "https://app.sanctum.so/strongSOL"
             ],
-            params={
-                # 'pageOptions': { # Keep commented for now
-                #     'onlyMainContent': True
-                # },
-                # 'extractorOptions': { # Keep commented for now
-                #     'extractionType': 'llm_extraction',
-                #     'prompt': ''' ... ''', # This was an incorrect nesting attempt
-                #     'schema': ExtractSchema.model_json_schema() # This was an incorrect nesting attempt
-                # },
-                'prompt': '''From SVT.one - Extract the Stake, Commission, Leader Rewards, Voting Fee, SOL Price, and Current-stats-val (the current income value next to the income 30 epochs graph).
+            prompt='''From SVT.one - Extract the Stake, Commission, Leader Rewards, Voting Fee, SOL Price, and Current-stats-val (the current income value next to the income 30 epochs graph).
 
 From Birdeye.so - Extract the 24h Volume value (e.g., $3.1K or $1.2M).
 
 From Solscan.io - Extract the holders and current supply.
 
 From app.sanctum.so/strongSOL - Extract the APY for strongSOL, if multiple APYs are listed, prefer one that indicates '30D' or similar, or a general LST APY. If a specific "Last Epoch APY" is available, use that.''',
-                'schema': ExtractSchema.model_json_schema()
-            }
+            schema=ExtractSchema.model_json_schema()
         )
         print("Firecrawl API Response:")
         print(firecrawl_response)
         
         data = {}
-        if isinstance(firecrawl_response, dict) and firecrawl_response.get('error'):
-            print(f"Firecrawl API error: {firecrawl_response.get('error')}")
-        elif isinstance(firecrawl_response, list) and any(item.get('error') for item in firecrawl_response if isinstance(item, dict)):
-            print("Firecrawl API returned an error for one or more URLs.")
-            data = next((item.get('data', {}) for item in firecrawl_response if isinstance(item, dict) and item.get('success')), {})
-            if not data and firecrawl_response and isinstance(firecrawl_response[0], dict):
-                 data = firecrawl_response[0].get('data', {})
-        elif firecrawl_response and isinstance(firecrawl_response, list) and firecrawl_response[0].get('success'):
-             data = firecrawl_response[0].get('data', {})
-        elif firecrawl_response and isinstance(firecrawl_response, dict) and firecrawl_response.get('success'):
-            data = firecrawl_response.get('data',{})
+        # Updated response handling for V1 Extract API (ExtractResponse object)
+        if hasattr(firecrawl_response, 'success') and firecrawl_response.success:
+            if hasattr(firecrawl_response, 'data') and firecrawl_response.data:
+                data = firecrawl_response.data
+                print(f"Successfully extracted data: {data}")
+            else:
+                print("No data in successful response")
+        elif hasattr(firecrawl_response, 'error'):
+            print(f"Firecrawl API error: {firecrawl_response.error}")
         else:
-            print("No valid response or data from Firecrawl API")
+            print(f"Unexpected response format. Type: {type(firecrawl_response)}")
 
         wallet_data = await get_wallet_balances()
         

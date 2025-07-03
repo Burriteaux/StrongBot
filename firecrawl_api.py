@@ -10,8 +10,9 @@ def fetch_epoch_data(api_key: str, url: str) -> Dict:
     
     data = {
         'url': url,
-        'extract': {
-            'epoch_rewards': 'Extract the epoch leader rewards, commission rewards, and total rewards from this validator dashboard'
+        'formats': ['json'],
+        'jsonOptions': {
+            'prompt': 'Extract the epoch leader rewards, commission rewards, and total rewards from this validator dashboard'
         }
     }
     
@@ -32,8 +33,12 @@ def fetch_epoch_data(api_key: str, url: str) -> Dict:
         print(f"Response content: {response.text}")
         
         if response.status_code == 200:
-            data = response.json()
-            return data.get('data', {}).get('json', {})
+            response_data = response.json()
+            if response_data.get('success') and response_data.get('data', {}).get('json'):
+                return response_data['data']['json']
+            else:
+                print(f"Error in response: {response_data.get('error', 'Unknown error')}")
+                return {}
         else:
             print(f"Error: Non-200 status code: {response.status_code}")
             return {}
@@ -51,8 +56,9 @@ def fetch_token_data(api_key: str, url: str) -> Dict:
     
     data = {
         'url': url,
-        'extract': {
-            'token_info': 'Extract the 24h volume, number of holders, and liquidity in USD from this token page'
+        'formats': ['json'],
+        'jsonOptions': {
+            'prompt': 'Extract the 24h volume, number of holders, and liquidity in USD from this token page'
         }
     }
     
@@ -73,8 +79,12 @@ def fetch_token_data(api_key: str, url: str) -> Dict:
         print(f"Response content: {response.text}")
         
         if response.status_code == 200:
-            data = response.json()
-            return data.get('data', {}).get('json', {})
+            response_data = response.json()
+            if response_data.get('success') and response_data.get('data', {}).get('json'):
+                return response_data['data']['json']
+            else:
+                print(f"Error in response: {response_data.get('error', 'Unknown error')}")
+                return {}
         else:
             print(f"Error: Non-200 status code: {response.status_code}")
             return {}

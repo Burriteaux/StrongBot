@@ -56,9 +56,13 @@ cp .env.example .env
 
 5. Configure your environment variables in the .env file:
 - Add your Discord bot token
-- Add your Discord channel ID
+- Add your Discord channel ID (this should be a number, e.g., 1234567890)
 - Add your FireCrawl API key
 - Add your Helius API key
+
+## Recent Updates
+
+**✅ Firecrawl V1 Migration Complete** - The bot has been updated to use Firecrawl V1 API. See `FIRECRAWL_V1_MIGRATION.md` for full migration details.
 
 ## Running the Bot
 
