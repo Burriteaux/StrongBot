@@ -31,7 +31,7 @@ HELIUS_API_KEY = os.getenv('HELIUS_API_KEY')
 # print(f"DEBUG: Raw CHECK_INTERVAL from .env: '{os.getenv('CHECK_INTERVAL', '3600')}'")
 
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '3600'))
-WALLET_BALANCES_URL = "https://shwallets.glitch.me/balances.csv"
+WALLET_BALANCES_URL = "https://strongpricebotvercel-erpqwps50-burriteauxs-projects.vercel.app/api/balances"
 
 # Initialize Solana client
 SOLANA_RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
