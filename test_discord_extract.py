@@ -56,7 +56,7 @@ From Birdeye.so - Extract the 24h Volume value (e.g., $3.1K or $1.2M).
 
 From Solscan.io - Extract the holders and current supply.
 
-From app.sanctum.so/strongSOL - Extract the APY for strongSOL, if multiple APYs are listed, prefer one that indicates '30D' or similar, or a general LST APY. If a specific "Last Epoch APY" is available, use that.''',
+From app.sanctum.so/strongSOL - Extract the APY value that is labeled as "Last Epoch's APY" from the strongSOL staking page.''',
             schema=ExtractSchema.model_json_schema()
         )
         
