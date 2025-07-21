@@ -26,6 +26,7 @@ DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID', '0'))
 FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY')
 HELIUS_API_KEY = os.getenv('HELIUS_API_KEY')
+SANCTUM_API_KEY = os.getenv('SANCTUM_API_KEY')
 
 # Remove this line for debugging
 # print(f"DEBUG: Raw CHECK_INTERVAL from .env: '{os.getenv('CHECK_INTERVAL', '3600')}'")
@@ -81,7 +82,7 @@ class ExtractSchema(BaseModel):
     volume_24h: Optional[float] = Field(default=None, alias="StrongSOL 24hr Volume ($)")
     holders: Optional[float] = Field(default=None, alias="Holders")
     current_supply: Optional[float] = Field(default=None, alias="Current Supply")
-    last_epoch_apy: Optional[float] = Field(default=None, alias="Last Epoch's APY")
+    # last_epoch_apy: Removed - now fetched directly from Sanctum API
 
     @validator('*', pre=True)
     def empty_str_to_none(cls, v):
@@ -134,6 +135,61 @@ async def get_wallet_balances() -> Dict[str, Any]:
         print(f"Unexpected error in get_wallet_balances: {str(e)}")
         return {"individual_balances": [], "total_balance": 0.0, "error": str(e)}
 
+async def get_sanctum_apy() -> Optional[float]:
+    """Fetch StrongSOL APY data directly from Sanctum API."""
+    try:
+        # Using the correct API endpoint that works
+        api_url = "https://sanctum-api.ironforge.network/lsts/strongSOL"
+        api_key = SANCTUM_API_KEY
+        
+        if not api_key:
+            print("Error: SANCTUM_API_KEY not found in environment variables")
+            return None
+        
+        # Use correct authentication method discovered from testing
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{api_url}?apiKey={api_key}") as response:
+                print(f"Sanctum API Status: {response.status}")
+                
+                if response.status == 200:
+                    data = await response.json()
+                elif response.status == 400:
+                    error_text = await response.text()
+                    if "Invalid API key" in error_text:
+                        print("Error: Invalid Sanctum API key. Please check your SANCTUM_API_KEY in .env file")
+                        print("The API key from the screenshot may be a demo key. You may need to:")
+                        print("1. Register for a real API key at Ironforge")
+                        print("2. Or contact Sanctum/Ironforge for API access")
+                        return None
+                    else:
+                        print(f"Sanctum API error: {error_text}")
+                        return None
+                else:
+                    response.raise_for_status()
+                    data = await response.json()
+                
+                # Response format: {"data": [{"latestApy": 0.0820367444573813, ...}]}
+                if data.get('data') and len(data['data']) > 0:
+                    # Get the strongSOL data (first item in the array)
+                    strongsol_data = data['data'][0]
+                    apy_decimal = strongsol_data.get('latestApy')
+                    
+                    if apy_decimal is not None:
+                        # Convert decimal to percentage (e.g., 0.082 -> 8.2%)
+                        apy_percentage = apy_decimal * 100
+                        print(f"Successfully fetched Sanctum APY: {apy_percentage:.2f}%")
+                        return apy_percentage
+                
+                print("No APY data found in Sanctum API response")
+                return None
+                
+    except aiohttp.ClientError as e:
+        print(f"Error fetching Sanctum APY - HTTP error: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Error fetching Sanctum APY - Unexpected error: {str(e)}")
+        return None
+
 @bot.event
 async def on_ready():
     """Handler for bot ready event"""
@@ -159,16 +215,13 @@ async def post_update():
             urls=[
                 "https://svt.one/dashboard/Ac1beBKixfNdrTAac7GRaTsJTxLyvgGvJjvy4qQfvyfc",
                 "https://birdeye.so/token/strng7mqqc1MBJJV6vMzYbEqnwVGvKKGKedeCvtktWA?chain=solana",
-                "https://solscan.io/token/strng7mqqc1MBJJV6vMzYbEqnwVGvKKGKedeCvtktWA",
-                "https://app.sanctum.so/strongSOL"
+                "https://solscan.io/token/strng7mqqc1MBJJV6vMzYbEqnwVGvKKGKedeCvtktWA"
             ],
             prompt='''From SVT.one - Extract the Stake, Commission, Leader Rewards, Voting Fee, SOL Price, and Current-stats-val (the current income value next to the income 30 epochs graph).
 
 From Birdeye.so - Extract the 24h Volume value (e.g., $3.1K or $1.2M).
 
-From Solscan.io - Extract the holders and current supply.
-
-From app.sanctum.so/strongSOL - Extract the APY value that is labeled as "Last Epoch's APY" from the strongSOL staking page.''',
+From Solscan.io - Extract the holders and current supply.''',
             schema=ExtractSchema.model_json_schema()
         )
         print("Firecrawl API Response:")
@@ -189,6 +242,9 @@ From app.sanctum.so/strongSOL - Extract the APY value that is labeled as "Last E
 
         wallet_data = await get_wallet_balances()
         
+        # Fetch APY data directly from Sanctum API
+        sanctum_apy = await get_sanctum_apy()
+        
         # If in terminal test mode (no channel), print collected data and return
         if channel is None:
             print("\n--- Terminal Test Mode: Fetched Data ---")
@@ -201,6 +257,8 @@ From app.sanctum.so/strongSOL - Extract the APY value that is labeled as "Last E
                 print(data)
             print("\nWallet Balances Data:")
             print(json.dumps(wallet_data, indent=2))
+            print("\nSanctum APY Data:")
+            print(f"APY: {sanctum_apy}%" if sanctum_apy is not None else "APY: N/A")
             print("--- End of Terminal Test ---")
             return # Exit before trying to use Discord objects
 
@@ -246,26 +304,11 @@ From app.sanctum.so/strongSOL - Extract the APY value that is labeled as "Last E
         else:
             embed.add_field(name='Wallet Balances', value="N/A", inline=False)
         
-        # Add Last Epoch's APY (Moved Here)
-        apy_value = data.get("Last Epoch's APY") # Fetching data using the original alias
-        if apy_value is not None:
-            try:
-                if isinstance(apy_value, str):
-                    apy_value_cleaned = apy_value.replace('%', '').strip()
-                    apy_float = float(apy_value_cleaned)
-                elif isinstance(apy_value, (int, float)):
-                    apy_float = float(apy_value)
-                else:
-                    apy_float = None
-                
-                if apy_float is not None:
-                    embed.add_field(name="StrongSOL Last APY", value=f"{apy_float:.2f}%", inline=False) # Display name changed
-                else:
-                    embed.add_field(name="StrongSOL Last APY", value="N/A", inline=False) # Display name changed
-            except ValueError:
-                 embed.add_field(name="StrongSOL Last APY", value="N/A (parse error)", inline=False) # Display name changed
+        # Add StrongSOL APY from Sanctum API
+        if sanctum_apy is not None:
+            embed.add_field(name="StrongSOL Last APY", value=f"{sanctum_apy:.2f}%", inline=False)
         else:
-            embed.add_field(name="StrongSOL Last APY", value="N/A", inline=False) # Display name changed
+            embed.add_field(name="StrongSOL Last APY", value="N/A", inline=False)
 
         # Token Data
         volume_str = data.get('StrongSOL 24hr Volume ($)')

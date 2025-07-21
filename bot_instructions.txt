@@ -1,0 +1,38 @@
+StrongBot Instructions
+====================
+
+Starting the Bot:
+1. Open Terminal
+2. Navigate to bot directory:
+   cd /Users/matlester/Scrape_Bot
+
+3. Activate virtual environment:
+   source env/bin/activate
+   (You should see (env) at the start of your terminal prompt)
+
+4. Run the bot:
+   python3 discord_bot.py
+   (You should see "StrongBot has connected to Discord!")
+
+Testing the Bot:
+1. Go to your Discord channel
+2. Type: !test
+3. Bot should respond with validator and token data
+
+Stopping the Bot:
+1. Press Ctrl+C in the terminal where the bot is running
+
+Common Issues:
+- If you see "ModuleNotFoundError", make sure you've activated the virtual environment
+- If bot isn't responding, make sure it's running and connected to Discord
+- If you get "N/A" values, check the API responses in the terminal
+
+Bot Features:
+- Posts daily updates at 8:00 AM
+- Can be tested anytime with !test command
+- Shows Epoch Rewards and Token data
+
+Important Notes:
+- Keep your Discord token and API keys private
+- The bot must be running to respond to commands
+- Terminal must stay open while bot is running 

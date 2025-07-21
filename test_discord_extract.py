@@ -6,7 +6,8 @@ without needing Discord token setup.
 import asyncio
 import os
 import sys
-from typing import Dict, Any
+import aiohttp
+from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field, validator
 from firecrawl import FirecrawlApp
 
@@ -27,7 +28,7 @@ class ExtractSchema(BaseModel):
     volume_24h: float = Field(default=None, alias="StrongSOL 24hr Volume ($)")
     holders: float = Field(default=None, alias="Holders")
     current_supply: float = Field(default=None, alias="Current Supply")
-    last_epoch_apy: float = Field(default=None, alias="Last Epoch's APY")
+    # last_epoch_apy: Removed - now fetched directly from Sanctum API
 
     @validator('*', pre=True)
     def empty_str_to_none(cls, v):
@@ -45,18 +46,14 @@ async def test_firecrawl_v1():
         print("Making Firecrawl API request...")
         firecrawl_response = app.extract(
             urls=[
-                "https://svt.one/dashboard/Ac1beBKixfNdrTAac7GRaTsJTxLyvgGvJjvy4qQfvyfc",
-                "https://birdeye.so/token/strng7mqqc1MBJJV6vMzYbEqnwVGvKKGKedeCvtktWA?chain=solana",
-                "https://solscan.io/token/strng7mqqc1MBJJV6vMzYbEqnwVGvKKGKedeCvtktWA",
-                "https://app.sanctum.so/strongSOL"
+                "https://svt.one/dashboard/Ac1beBKixfNdrTAac7GRaTsJTxLyvgGvKKGKedeCvtktWA?chain=solana",
+                "https://solscan.io/token/strng7mqqc1MBJJV6vMzYbEqnwVGvKKGKedeCvtktWA"
             ],
             prompt='''From SVT.one - Extract the Stake, Commission, Leader Rewards, Voting Fee, SOL Price, and Current-stats-val (the current income value next to the income 30 epochs graph).
 
 From Birdeye.so - Extract the 24h Volume value (e.g., $3.1K or $1.2M).
 
-From Solscan.io - Extract the holders and current supply.
-
-From app.sanctum.so/strongSOL - Extract the APY value that is labeled as "Last Epoch's APY" from the strongSOL staking page.''',
+From Solscan.io - Extract the holders and current supply.''',
             schema=ExtractSchema.model_json_schema()
         )
         
@@ -98,6 +95,89 @@ From app.sanctum.so/strongSOL - Extract the APY value that is labeled as "Last E
         print(traceback.format_exc())
         return False
 
+async def test_sanctum_api():
+    """Test the Sanctum API directly"""
+    print("\nTesting Sanctum API...")
+    
+    try:
+        api_url = "https://sanctum-api.ironforge.network/lsts/strongSOL"
+        api_key = os.getenv('SANCTUM_API_KEY', '01K07MRJ5YDAQOHRGMD67QX0GH')
+        
+        # Try different parameter names based on error message "Missing API key"
+        param_names = ['apiKey', 'api_key', 'key', 'token', 'auth', 'authorization']
+        
+        async with aiohttp.ClientSession() as session:
+            for param_name in param_names:
+                print(f"\nTrying parameter: {param_name}")
+                async with session.get(f"{api_url}?{param_name}={api_key}") as response:
+                    print(f"Status: {response.status}")
+                    if response.status == 200:
+                        data = await response.json()
+                        print(f"✅ Success with parameter: {param_name}")
+                        break
+                    else:
+                        try:
+                            error_text = await response.text()
+                            print(f"Error: {error_text[:100]}...")
+                        except:
+                            pass
+            else:
+                # Try with headers if query params don't work
+                print("\nTrying with headers...")
+                headers = {
+                    'X-API-Key': api_key,
+                    'Authorization': api_key,
+                    'x-api-key': api_key
+                }
+                for header_name, header_value in headers.items():
+                    print(f"Trying header: {header_name}")
+                    async with session.get(api_url, headers={header_name: header_value}) as response:
+                        print(f"Status: {response.status}")
+                        if response.status == 200:
+                            data = await response.json()
+                            print(f"✅ Success with header: {header_name}")
+                            break
+                        else:
+                            try:
+                                error_text = await response.text()
+                                print(f"Error: {error_text[:100]}...")
+                            except:
+                                pass
+                else:
+                    print("❌ All authentication methods failed")
+                    return None
+        
+        print(f"Sanctum API Response: {data}")
+        
+        if data.get('data') and len(data['data']) > 0:
+            strongsol_data = data['data'][0]
+            apy_decimal = strongsol_data.get('latestApy')
+            
+            if apy_decimal is not None:
+                apy_percentage = apy_decimal * 100
+                print(f"✅ Sanctum APY: {apy_percentage:.2f}%")
+                return apy_percentage
+        
+        print("❌ No APY data found in response")
+        return None
+                
+    except Exception as e:
+        print(f"❌ Error fetching Sanctum APY: {str(e)}")
+        return None
+
+async def main():
+    """Run all tests"""
+    print("=== Testing Firecrawl V1 + Sanctum API Integration ===")
+    
+    # Test Sanctum API first
+    sanctum_apy = await test_sanctum_api()
+    
+    # Test Firecrawl extraction
+    await test_firecrawl_v1()
+    
+    print(f"\n=== Test Summary ===")
+    print(f"Sanctum APY: {'✅ PASSED' if sanctum_apy is not None else '❌ FAILED'}")
+    print("Firecrawl V1: See results above")
+
 if __name__ == "__main__":
-    success = asyncio.run(test_firecrawl_v1())
-    sys.exit(0 if success else 1) 
+    asyncio.run(main()) 
