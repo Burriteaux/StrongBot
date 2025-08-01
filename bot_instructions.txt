@@ -19,6 +19,13 @@ Testing the Bot:
 2. Type: !test
 3. Bot should respond with validator and token data
 
+Testing Expense Logging:
+1. Type: !test_expense to test Google Sheets and Discord connections
+2. Type: !add to create a persistent expense form
+3. Select category from dropdown and fill out the expense form
+4. After successful submission, a new form automatically appears for the next expense
+5. No need to type !add repeatedly - the form stays active!
+
 Stopping the Bot:
 1. Press Ctrl+C in the terminal where the bot is running
 
@@ -28,9 +35,14 @@ Common Issues:
 - If you get "N/A" values, check the API responses in the terminal
 
 Bot Features:
-- Posts daily updates at 8:00 AM
+- Posts automatic validator updates when new epochs are detected
 - Can be tested anytime with !test command
 - Shows Epoch Rewards and Token data
+- Expense logging with !add command (logs to both Google Sheets and Discord)
+- Interactive expense forms with category selection
+- Automatic Solana epoch tracking for expense records
+- Persistent expense forms - auto-refreshes after each submission
+- Auto-cleanup of commands to keep Discord channels tidy
 
 Important Notes:
 - Keep your Discord token and API keys private

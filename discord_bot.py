@@ -17,6 +17,7 @@ import asyncio # Added for sleep
 import aiohttp # Added for async HTTP requests
 import csv # Added for CSV parsing
 from typing import Optional, List, Dict, Any # Added for typing
+from expense_handler import ExpenseHandler
 
 # Load environment variables
 load_dotenv(find_dotenv(usecwd=True))
@@ -61,6 +62,9 @@ intents.presences = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 app = FirecrawlApp(api_key=FIRECRAWL_API_KEY)
 
+# Initialize expense handler
+expense_handler = ExpenseHandler(bot)
+
 def signal_handler(sig, frame):
     """Handle shutdown gracefully"""
     print('\nShutting down bot...')
@@ -89,6 +93,185 @@ class ExtractSchema(BaseModel):
         if isinstance(v, str) and v.strip() == "":
             return None
         return v
+
+
+class ExpenseModal(discord.ui.Modal, title='Log Expense'):
+    """Modal for expense entry"""
+    
+    def __init__(self, user_command_message=None, bot_form_message=None, original_channel=None):
+        super().__init__()
+        self.user_command_message = user_command_message  # The user's !add command
+        self.bot_form_message = bot_form_message  # The bot's category selection form
+        self.original_channel = original_channel
+        
+    # Category dropdown will be handled differently - we'll use a Select View first
+    category = discord.ui.TextInput(
+        label='Category',
+        placeholder='LST Reserve, Server Payment, vSOL Transfer, Team Payout, Other',
+        required=True,
+        max_length=100
+    )
+    
+    amount = discord.ui.TextInput(
+        label='Amount (SOL)',
+        placeholder='Enter amount in SOL (e.g., 125.50)',
+        required=True,
+        max_length=50
+    )
+    
+    transaction_hash = discord.ui.TextInput(
+        label='Transaction Hash',
+        placeholder='Enter Solana transaction hash',
+        required=False,
+        max_length=200
+    )
+    
+    notes = discord.ui.TextInput(
+        label='Notes',
+        placeholder='Additional notes (optional)',
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=500
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle modal submission"""
+        # Defer the response to give us time to process
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Get current epoch
+            current_epoch_num = await get_current_epoch()
+            
+            # Validate amount
+            try:
+                amount_val = float(self.amount.value.strip())
+                if amount_val <= 0:
+                    raise ValueError("Amount must be greater than 0")
+            except ValueError:
+                await interaction.followup.send(
+                    "❌ Invalid amount. Please enter a valid number greater than 0.",
+                    ephemeral=True
+                )
+                return
+            
+            # Validate category
+            valid_categories = ['LST Reserve', 'Server Payment', 'vSOL Transfer', 'Team Payout', 'Other']
+            category_val = self.category.value.strip()
+            
+            # Check if it's a valid preset category or "Other" with custom text
+            if category_val not in valid_categories and not category_val.startswith('Other'):
+                # If it's not a preset and doesn't start with "Other", treat it as "Other: {input}"
+                category_val = f"Other: {category_val}"
+            
+            # Prepare user data
+            user_data = {
+                'discord_user': f"{interaction.user.name}#{interaction.user.discriminator}",
+                'epoch': current_epoch_num,
+                'category': category_val,
+                'amount': str(amount_val),
+                'transaction_hash': self.transaction_hash.value.strip(),
+                'notes': self.notes.value.strip()
+            }
+            
+            # Log the expense
+            result = await expense_handler.log_expense(user_data)
+            
+            if result['success']:
+                await interaction.followup.send(
+                    f"{result['message']}\n\n"
+                    f"**Details:**\n"
+                    f"• Category: {category_val}\n"
+                    f"• Amount: {amount_val} SOL\n"
+                    f"• Epoch: {current_epoch_num}\n"
+                    f"• User: {user_data['discord_user']}",
+                    ephemeral=True
+                )
+                
+                # Clean up: Delete BOTH the user's !add command AND bot's category form
+                # Delete user's !add command
+                if self.user_command_message:
+                    try:
+                        await self.user_command_message.delete()
+                    except discord.errors.NotFound:
+                        pass  # Message already deleted
+                    except discord.errors.Forbidden:
+                        print("Warning: Bot lacks permission to delete user command")
+                    except Exception as e:
+                        print(f"Error deleting user command: {str(e)}")
+                
+                # Delete bot's category selection form
+                if self.bot_form_message:
+                    try:
+                        await self.bot_form_message.delete()
+                    except discord.errors.NotFound:
+                        pass  # Message already deleted
+                    except discord.errors.Forbidden:
+                        print("Warning: Bot lacks permission to delete bot form")
+                    except Exception as e:
+                        print(f"Error deleting bot form: {str(e)}")
+                
+                # Create a new expense form for the next entry
+                if self.original_channel:
+                    try:
+                        new_view = CategorySelectView(original_channel=self.original_channel)
+                        new_embed = discord.Embed(
+                            title="💰 Log New Expense",
+                            description="Ready for next expense entry:",
+                            color=discord.Color.green()
+                        )
+                        new_message = await self.original_channel.send(embed=new_embed, view=new_view)
+                        # Update the view to reference the new form message for future deletions
+                        new_view.bot_form_message = new_message
+                    except Exception as e:
+                        print(f"Error creating new expense form: {str(e)}")
+            else:
+                await interaction.followup.send(
+                    f"{result['message']}\n\n"
+                    f"Please try the `!add` command again.",
+                    ephemeral=True
+                )
+                
+        except Exception as e:
+            print(f"Error in expense modal submission: {str(e)}")
+            await interaction.followup.send(
+                "❌ An unexpected error occurred while logging the expense. Please try again.",
+                ephemeral=True
+            )
+
+
+class CategorySelectView(discord.ui.View):
+    """View with category selection dropdown"""
+    
+    def __init__(self, user_command_message=None, bot_form_message=None, original_channel=None):
+        super().__init__(timeout=300)  # 5 minute timeout
+        self.user_command_message = user_command_message  # The user's !add command
+        self.bot_form_message = bot_form_message  # This category selection form
+        self.original_channel = original_channel
+        
+    @discord.ui.select(
+        placeholder="Choose an expense category...",
+        options=[
+            discord.SelectOption(label="LST Reserve", description="LST Reserve expenses"),
+            discord.SelectOption(label="Server Payment", description="Server-related payments"),
+            discord.SelectOption(label="vSOL Transfer", description="vSOL transfer expenses"),
+            discord.SelectOption(label="Team Payout", description="Team member payouts"),
+            discord.SelectOption(label="Other", description="Other expenses (specify in form)")
+        ]
+    )
+    async def category_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle category selection"""
+        selected_category = select.values[0]
+        
+        # Create and show the expense modal with the selected category
+        modal = ExpenseModal(
+            user_command_message=self.user_command_message,
+            bot_form_message=self.bot_form_message,
+            original_channel=self.original_channel
+        )
+        modal.category.default = selected_category
+        
+        await interaction.response.send_modal(modal)
 
 async def get_current_epoch():
     """Get the current epoch from Solana RPC"""
@@ -380,6 +563,71 @@ async def test_update(ctx):
         await ctx.send("Test update complete.")
     else:
         await ctx.send(f"This command can only be used in the designated channel ID: {CHANNEL_ID}")
+
+@bot.command(name='add')
+async def add_expense(ctx):
+    """Trigger expense logging modal"""
+    try:
+        # Create and send the category selection view
+        view = CategorySelectView(
+            user_command_message=ctx.message,  # User's !add command
+            original_channel=ctx.channel
+        )
+        embed = discord.Embed(
+            title="💰 Log New Expense",
+            description="Please select a category for your expense:",
+            color=discord.Color.blue()
+        )
+        sent_message = await ctx.send(embed=embed, view=view)
+        # Update the view to reference the bot's form message
+        view.bot_form_message = sent_message
+    except Exception as e:
+        print(f"Error in add command: {str(e)}")
+        await ctx.send("❌ Error creating expense form. Please try again.", ephemeral=True)
+
+@bot.command(name='test_expense')
+async def test_expense_connection(ctx):
+    """Test expense logging connections (Google Sheets and Discord)"""
+    try:
+        await ctx.send("🧪 Testing expense logging connections...")
+        
+        # Test connections
+        results = await expense_handler.test_connection()
+        
+        embed = discord.Embed(
+            title="🧪 Expense System Test Results",
+            color=discord.Color.green() if all(results.values()) else discord.Color.red()
+        )
+        
+        embed.add_field(
+            name="📊 Google Sheets", 
+            value="✅ Connected" if results.get('google_sheets') else "❌ Failed", 
+            inline=True
+        )
+        embed.add_field(
+            name="💬 Discord Channel", 
+            value="✅ Connected" if results.get('discord') else "❌ Failed", 
+            inline=True
+        )
+        
+        if all(results.values()):
+            embed.add_field(
+                name="Status", 
+                value="🎉 All systems operational!", 
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="Status", 
+                value="⚠️ Some systems failed. Check logs for details.", 
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
+        
+    except Exception as e:
+        print(f"Error in test_expense command: {str(e)}")
+        await ctx.send("❌ Error testing expense connections. Check logs for details.")
 
 if __name__ == "__main__":
     required_vars = ['DISCORD_TOKEN', 'DISCORD_CHANNEL_ID', 'FIRECRAWL_API_KEY', 'HELIUS_API_KEY']
