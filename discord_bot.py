@@ -156,7 +156,7 @@ class ExpenseModal(discord.ui.Modal, title='Log Expense'):
                 return
             
             # Validate category
-            valid_categories = ['LST Reserve', 'Server Payment', 'vSOL Transfer', 'Team Payout', 'Other']
+            valid_categories = ['LST Reserve', 'Server Payment', 'vSOL Transfer', 'Team Payout', 'Kamino Incentives', 'Other']
             category_val = self.category.value.strip()
             
             # Check if it's a valid preset category or "Other" with custom text
@@ -211,20 +211,7 @@ class ExpenseModal(discord.ui.Modal, title='Log Expense'):
                     except Exception as e:
                         print(f"Error deleting bot form: {str(e)}")
                 
-                # Create a new expense form for the next entry
-                if self.original_channel:
-                    try:
-                        new_view = CategorySelectView(original_channel=self.original_channel)
-                        new_embed = discord.Embed(
-                            title="💰 Log New Expense",
-                            description="Ready for next expense entry:",
-                            color=discord.Color.green()
-                        )
-                        new_message = await self.original_channel.send(embed=new_embed, view=new_view)
-                        # Update the view to reference the new form message for future deletions
-                        new_view.bot_form_message = new_message
-                    except Exception as e:
-                        print(f"Error creating new expense form: {str(e)}")
+
             else:
                 await interaction.followup.send(
                     f"{result['message']}\n\n"
@@ -256,6 +243,7 @@ class CategorySelectView(discord.ui.View):
             discord.SelectOption(label="Server Payment", description="Server-related payments"),
             discord.SelectOption(label="vSOL Transfer", description="vSOL transfer expenses"),
             discord.SelectOption(label="Team Payout", description="Team member payouts"),
+            discord.SelectOption(label="Kamino Incentives", description="Kamino incentive expenses"),
             discord.SelectOption(label="Other", description="Other expenses (specify in form)")
         ]
     )
