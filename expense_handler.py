@@ -66,7 +66,7 @@ class ExpenseHandler:
                 return False
             
             # Check if headers exist
-            range_name = f"{self.worksheet_name}!A1:G1"
+            range_name = f"{self.worksheet_name}!A1:H1"
             request = self.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=range_name
@@ -75,28 +75,37 @@ class ExpenseHandler:
             
             values = result.get('values', [])
             
-            # If no headers or incomplete headers, add them
-            if not values or len(values[0]) < 7:
-                # Column structure: Category | Amount | Solana Epoch | Transaction Hash | Timestamp | Discord User | Notes
-                headers = [
-                    'Category',
-                    'Amount',
-                    'Solana Epoch',
-                    'Transaction Hash',
-                    'Timestamp',
-                    'Discord User',
-                    'Notes'
-                ]
-                
-                body = {'values': [headers]}
+            # If no headers or incomplete headers, add or upgrade them
+            desired_headers = [
+                'Category',
+                'Amount',
+                'Currency',
+                'Solana Epoch',
+                'Transaction Hash',
+                'Timestamp',
+                'Discord User',
+                'Notes'
+            ]
+
+            need_update = False
+            if not values or len(values[0]) == 0:
+                need_update = True
+            else:
+                current_headers = values[0]
+                # If legacy (7 columns) or mismatched, update to desired headers
+                if len(current_headers) < len(desired_headers) or current_headers[:len(desired_headers)] != desired_headers:
+                    need_update = True
+
+            if need_update:
+                body = {'values': [desired_headers]}
                 request = self.service.spreadsheets().values().update(
                     spreadsheetId=self.spreadsheet_id,
-                    range=f"{self.worksheet_name}!A1:G1",
+                    range=f"{self.worksheet_name}!A1:H1",
                     valueInputOption='RAW',
                     body=body
                 )
                 await asyncio.to_thread(request.execute)
-                print("Headers added to Google Sheet")
+                print("Headers set/updated in Google Sheet")
             
             return True
             
@@ -119,10 +128,11 @@ class ExpenseHandler:
             
             # Prepare data for insertion
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            # Column order: Category | Amount | Solana Epoch | Transaction Hash | Timestamp | Discord User | Notes
+            # Column order: Category | Amount | Currency | Solana Epoch | Transaction Hash | Timestamp | Discord User | Notes
             row_data = [
                 user_data.get('category', ''),
                 user_data.get('amount', ''),
+                user_data.get('currency', 'SOL'),
                 str(user_data.get('epoch', 'N/A')),
                 user_data.get('transaction_hash', ''),
                 timestamp,
@@ -131,7 +141,7 @@ class ExpenseHandler:
             ]
             
             # Append to sheet
-            range_name = f"{self.worksheet_name}!A:G"
+            range_name = f"{self.worksheet_name}!A:H"
             body = {'values': [row_data]}
             
             request = self.service.spreadsheets().values().append(
@@ -182,8 +192,9 @@ class ExpenseHandler:
             )
             
             # Add fields
+            currency = user_data.get('currency', 'SOL')
             embed.add_field(name='📊 Category', value=user_data.get('category', 'N/A'), inline=True)
-            embed.add_field(name='💵 Amount', value=f"{user_data.get('amount', 'N/A')} SOL", inline=True)
+            embed.add_field(name='💵 Amount', value=f"{user_data.get('amount', 'N/A')} {currency}", inline=True)
             embed.add_field(name='👤 User', value=user_data.get('discord_user', 'Unknown'), inline=True)
             
             if user_data.get('transaction_hash'):

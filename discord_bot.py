@@ -98,11 +98,12 @@ class ExtractSchema(BaseModel):
 class ExpenseModal(discord.ui.Modal, title='Log Expense'):
     """Modal for expense entry"""
     
-    def __init__(self, user_command_message=None, bot_form_message=None, original_channel=None):
+    def __init__(self, user_command_message=None, bot_form_message=None, original_channel=None, selected_currency: Optional[str] = None):
         super().__init__()
         self.user_command_message = user_command_message  # The user's !add command
         self.bot_form_message = bot_form_message  # The bot's category selection form
         self.original_channel = original_channel
+        self.selected_currency = selected_currency  # Preset currency from button selection; 'Other' requires user input
         
     # Category dropdown will be handled differently - we'll use a Select View first
     category = discord.ui.TextInput(
@@ -113,8 +114,8 @@ class ExpenseModal(discord.ui.Modal, title='Log Expense'):
     )
     
     amount = discord.ui.TextInput(
-        label='Amount (SOL)',
-        placeholder='Enter amount in SOL (e.g., 125.50)',
+        label='Amount',
+        placeholder='Enter amount (e.g., 125.50)',
         required=True,
         max_length=50
     )
@@ -132,6 +133,14 @@ class ExpenseModal(discord.ui.Modal, title='Log Expense'):
         style=discord.TextStyle.paragraph,
         required=False,
         max_length=500
+    )
+    
+    # Optional field: only required if currency selection was "Other"
+    currency_other = discord.ui.TextInput(
+        label='Currency (required if you chose Other)',
+        placeholder='e.g., GBP, EUR, wSOL',
+        required=False,
+        max_length=20
     )
     
     async def on_submit(self, interaction: discord.Interaction):
@@ -164,12 +173,25 @@ class ExpenseModal(discord.ui.Modal, title='Log Expense'):
                 # If it's not a preset and doesn't start with "Other", treat it as "Other: {input}"
                 category_val = f"Other: {category_val}"
             
+            # Determine currency
+            currency_val = (self.selected_currency or 'SOL').strip() if isinstance(self.selected_currency, str) else 'SOL'
+            if currency_val.lower() == 'other':
+                custom_currency = (self.currency_other.value or '').strip()
+                if not custom_currency:
+                    await interaction.followup.send(
+                        "❌ Please provide a currency ticker in the 'Currency (required if you chose Other)' field.",
+                        ephemeral=True
+                    )
+                    return
+                currency_val = custom_currency.upper()
+            
             # Prepare user data
             user_data = {
                 'discord_user': f"{interaction.user.name}#{interaction.user.discriminator}",
                 'epoch': current_epoch_num,
                 'category': category_val,
                 'amount': str(amount_val),
+                'currency': currency_val,
                 'transaction_hash': self.transaction_hash.value.strip(),
                 'notes': self.notes.value.strip()
             }
@@ -182,7 +204,7 @@ class ExpenseModal(discord.ui.Modal, title='Log Expense'):
                     f"{result['message']}\n\n"
                     f"**Details:**\n"
                     f"• Category: {category_val}\n"
-                    f"• Amount: {amount_val} SOL\n"
+                    f"• Amount: {amount_val} {currency_val}\n"
                     f"• Epoch: {current_epoch_num}\n"
                     f"• User: {user_data['discord_user']}",
                     ephemeral=True
@@ -251,15 +273,60 @@ class CategorySelectView(discord.ui.View):
         """Handle category selection"""
         selected_category = select.values[0]
         
-        # Create and show the expense modal with the selected category
-        modal = ExpenseModal(
+        # Replace the current message with currency selection buttons
+        currency_view = CurrencySelectView(
+            selected_category=selected_category,
             user_command_message=self.user_command_message,
             bot_form_message=self.bot_form_message,
             original_channel=self.original_channel
         )
-        modal.category.default = selected_category
-        
+        new_embed = discord.Embed(
+            title="💱 Choose Currency",
+            description=f"Category: **{selected_category}**\n\nSelect the currency for this expense:",
+            color=discord.Color.blurple()
+        )
+        await interaction.response.edit_message(embed=new_embed, view=currency_view)
+
+
+class CurrencySelectView(discord.ui.View):
+    """View with currency selection buttons"""
+    def __init__(self, selected_category: str, user_command_message=None, bot_form_message=None, original_channel=None):
+        super().__init__(timeout=300)
+        self.selected_category = selected_category
+        self.user_command_message = user_command_message
+        self.bot_form_message = bot_form_message
+        self.original_channel = original_channel
+
+    async def _open_expense_modal(self, interaction: discord.Interaction, currency_label: str):
+        modal = ExpenseModal(
+            user_command_message=self.user_command_message,
+            bot_form_message=self.bot_form_message,
+            original_channel=self.original_channel,
+            selected_currency=currency_label
+        )
+        modal.category.default = self.selected_category
         await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="SOL", style=discord.ButtonStyle.primary)
+    async def btn_sol(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._open_expense_modal(interaction, "SOL")
+
+    @discord.ui.button(label="USDC", style=discord.ButtonStyle.primary)
+    async def btn_usdc(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._open_expense_modal(interaction, "USDC")
+
+    @discord.ui.button(label="strongSOL", style=discord.ButtonStyle.primary)
+    async def btn_strongsol(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._open_expense_modal(interaction, "strongSOL")
+
+    @discord.ui.button(label="vSOL", style=discord.ButtonStyle.primary)
+    async def btn_vsol(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._open_expense_modal(interaction, "vSOL")
+
+    @discord.ui.button(label="Other", style=discord.ButtonStyle.secondary)
+    async def btn_other(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Will require user to input custom currency in the modal's optional field
+        await self._open_expense_modal(interaction, "Other")
 
 async def get_current_epoch():
     """Get the current epoch from Solana RPC"""
