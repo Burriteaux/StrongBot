@@ -121,8 +121,8 @@ class ExpenseModal(discord.ui.Modal, title='Log Expense'):
     )
     
     transaction_hash = discord.ui.TextInput(
-        label='Transaction Hash',
-        placeholder='Enter Solana transaction hash',
+        label='TX Link (or hash)',
+        placeholder='Paste Solscan link or enter transaction hash',
         required=False,
         max_length=200
     )

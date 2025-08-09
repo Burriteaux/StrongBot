@@ -81,7 +81,7 @@ class ExpenseHandler:
                 'Amount',
                 'Currency',
                 'Solana Epoch',
-                'Transaction Hash',
+                'TX Link',
                 'Timestamp',
                 'Discord User',
                 'Notes'
@@ -128,7 +128,7 @@ class ExpenseHandler:
             
             # Prepare data for insertion
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            # Column order: Category | Amount | Currency | Solana Epoch | Transaction Hash | Timestamp | Discord User | Notes
+            # Column order: Category | Amount | Currency | Solana Epoch | TX Link | Timestamp | Discord User | Notes
             row_data = [
                 user_data.get('category', ''),
                 user_data.get('amount', ''),
@@ -201,7 +201,7 @@ class ExpenseHandler:
                 # Truncate hash for display
                 tx_hash = user_data['transaction_hash']
                 display_hash = f"{tx_hash[:8]}...{tx_hash[-8:]}" if len(tx_hash) > 16 else tx_hash
-                embed.add_field(name='🔗 Transaction', value=f"`{display_hash}`", inline=False)
+                embed.add_field(name='🔗 TX Link / Hash', value=f"`{display_hash}`", inline=False)
             
             if user_data.get('notes'):
                 embed.add_field(name='📝 Notes', value=user_data['notes'], inline=False)
