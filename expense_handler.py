@@ -198,10 +198,20 @@ class ExpenseHandler:
             embed.add_field(name='👤 User', value=user_data.get('discord_user', 'Unknown'), inline=True)
             
             if user_data.get('transaction_hash'):
-                # Truncate hash for display
-                tx_hash = user_data['transaction_hash']
-                display_hash = f"{tx_hash[:8]}...{tx_hash[-8:]}" if len(tx_hash) > 16 else tx_hash
-                embed.add_field(name='🔗 TX Link / Hash', value=f"`{display_hash}`", inline=False)
+                tx_input = str(user_data['transaction_hash']).strip()
+                # If input is a URL, render as a clickable masked link with shortened display text
+                if tx_input.lower().startswith('http://') or tx_input.lower().startswith('https://'):
+                    full_url = tx_input
+                    display_text = full_url
+                    max_length = 70
+                    if len(display_text) > max_length:
+                        # Show first 45 chars + ... + last 20 chars
+                        display_text = f"{full_url[:45]}...{full_url[-20:]}"
+                    embed.add_field(name='🔗 TX Link / Hash', value=f"[{display_text}]({full_url})", inline=False)
+                else:
+                    # Fallback: show hash as shortened code
+                    display_hash = f"{tx_input[:8]}...{tx_input[-8:]}" if len(tx_input) > 16 else tx_input
+                    embed.add_field(name='🔗 TX Link / Hash', value=f"`{display_hash}`", inline=False)
             
             if user_data.get('notes'):
                 embed.add_field(name='📝 Notes', value=user_data['notes'], inline=False)
